@@ -20,6 +20,16 @@ from langchain.docstore.document import Document
 from langchain import PromptTemplate, LLMChain
 #from IPython.display import display, Markdown
 from langchain_google_vertexai import ChatVertexAI
+from app.gcp_retriever import GCPRetriever, getconn
+from langchain_core.callbacks import AsyncCallbackManagerForRetrieverRun
+from langchain_core.documents import Document
+from langchain_core.retrievers import BaseRetriever
+from langchain_core.runnables import (
+    RunnableBranch,
+    RunnableLambda,
+    RunnableParallel,
+    RunnablePassthrough,
+)
 
 app = FastAPI()
 
@@ -35,6 +45,7 @@ instance_name = "development-ac-poc"  # @param {type:"string"}
 database_name = "poc"  # @param {type:"string"}
 database_user = "ac-dev"  # @param {type:"string"}
 
+user_query = 'what does hdl cholesterol do'
 
 # Edit this to add the chain you want to add
 # (1) Initialize VectorStore
@@ -42,66 +53,18 @@ from google.cloud import aiplatform
 
 aiplatform.init(project=f"{project_id}", location=f"{region}")
 
-# (3) Create prompt template
+async def get_docs():
+    retriever = GCPRetriever()
 
-user_query = input("User: ")
-qe = ollama.embeddings(model="mxbai-embed-large", prompt= user_query)
-qe1=qe[0]
 
-matches = []
-
-async def main():
-    loop = asyncio.get_running_loop()
-    async with Connector(loop=loop) as connector:
-        # Create connection to Cloud SQL database.
-        conn: asyncpg.Connection = await connector.connect_async(
-            f"{project_id}:{region}:{instance_name}",  # Cloud SQL instance connection name
-            "asyncpg",
-            user=f"{database_user}",
-            password=f"{database_password}",
-            db=f"{database_name}",
-        )
-
-        await register_vector(conn)
-        similarity_threshold = 0.3
-        num_matches = 10
-
-        # Find similar products to the query using cosine similarity search
-        # over all vector embeddings. This new feature is provided by `pgvector`.
-        results = await conn.fetch(
-            """
-                            WITH vector_matches AS (
-                              SELECT content, 1 - (embedding <=> $1) AS similarity
-                              FROM data_set1
-                              WHERE 1 - (embedding <=> $1) > $2
-                              ORDER BY similarity DESC
-                              LIMIT $3
-                            )
-                            SELECT * from vector_matches
-                            """,
-            qe1,
-            similarity_threshold,
-            num_matches,
+    docs = await retriever.invoke(user_query)
     
-        )
+    return docs
 
-        if len(results) == 0:
-            raise Exception("Did not find any results. Adjust the query parameters.")
+docs = asyncio.run(get_docs())
 
-        for r in results:
-            # Collect the description for all the matched similar toy products.
-            matches.append(
-                f"""{r["content"]}.
-                         ."""
-            )
-        await conn.close()
+#await retriever.ainvoke(user_query)
 
-
-# Run the SQL commands now.
-    await main()  
-
-# Show the results for similar products that matched the user query.
-matches
 
 
 llm = ChatVertexAI(model_name="gemini-pro")
@@ -138,14 +101,13 @@ combine_prompt = PromptTemplate(
     template=combine_prompt_template, input_variables=["text", "user_query"]
 )
 
-docs = [Document(page_content=t) for t in matches]
 chain = load_summarize_chain(
     llm, chain_type="map_reduce", map_prompt=map_prompt, combine_prompt=combine_prompt
 )
-answer = RunnableParallel.run(
+answer = chain.run(
     {
         "input_documents": docs,
-        "user_query": RunnablePassthrough()
+        "user_query": user_query
     }
 )
 
