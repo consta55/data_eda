@@ -34,6 +34,8 @@ from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import PromptTemplate
 from IPython.display import display, Markdown
 from pydantic import BaseModel
+from langchain_community.chat_models import ChatOllama
+
 
 app = FastAPI()
 user_query = "how can I lower my ldl cholesterol?"
@@ -79,34 +81,17 @@ member_persona =[{
         ],
         "content":"Apolipoprotein B (Apo B) was high. Elevated levels of Apo B increase your cardiovascular risk. Apo B attaches to negative types of cholesterol that cause plaque buildup in your blood vessels, which can lead to damage and heart disease.\nThere are signs of a cholesterol problem (high total cholesterol, high LDL \u201cbad\u201d cholesterol, high LDL small cholesterol, high LDL medium cholesterol, high LDL particle number, high non-HDL cholesterol). This can be due to several causes including diet, genetics, and\/or toxin exposure. However, your HDL \"good\" cholesterol was high, which actually decreases cardiovascular risk. Please talk with your local doctor to develop a treatment plan.\nYour omega 3 profile correlates with moderate risk for heart disease. You have a mix of both negative and protective factors. Overall, the levels aren\u2019t concerning but this is something to keep an eye on.\n"
     }]
-llm = ChatVertexAI(model_name="gemini-pro")
+llm = ChatOllama(model="llama3.1")
 prompt = PromptTemplate(
-    template="""
-                You will be given health information
-                enclosed in triple backticks (```) and a question enclosed in
-                double backticks(``).
-                You are a medical professional. Given the member persona, please answer the question in 200 words in an empathetic and personalized manner. 
-                Use only the given health information to answer and ensure to use the member persona to contextualize your response. 
-                Biomarkers that are Overrange will be listed in the OVER_Range field of the member persona
-                If the patient is a smoker this will be in the smoker field of the member persona
-                If the patient drinks, this will be found in the alchol field, and the frequency of alcohol intake can be found in the alcohol_frequency field.
-                The patient diet can be found in field diet, and if they are physically active, this field will be set to true
-                The medications the patient is taking can be found in identified medications field, and the past medical conditions the patient has self identified can be found in the conditions field
-                hollistically assess the patients member persona and ensure to use the member persona and the text to contextualize your response.
-                
-                Use everything you know about the patient from the member persona to contextualize text and give the member the most personalized answer possible
-
-                Question:
-                ``{user_query}``
-                
-                Context:
-                ``{member_persona}``
-                Description:
-                ```{text}```
-
-
-                Answer:
-                """,
+    template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|> You are a medical professional.
+    Use the following pieces of retrieved context to answer the question. 
+    If you don't know the answer, just say that you don't know.
+    You also have access to the patient's member persona. Please use this information to personalize your answer
+    Give a thoughtful and empathetic response to the question <|eot_id|><|start_header_id|>user<|end_header_id|>
+    Question: {user_query}
+    Context: {text}
+    Member_Persona: {member_persona}
+    Answer: <|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
     input_variables=["user_query", "text", "member_persona"],
 )
 class User_query(BaseModel):
@@ -121,7 +106,7 @@ async def create_item(user_query: User_query):
     docs = await GCPRetriever().invoke(user_query)
     #docs = retriever.invoke(user_query)
     answer= llm_agent.invoke({"user_query" :user_query, "text": docs, "member_persona": member_persona})
-    return (answer.content)
+    return (answer)
 
 
 
