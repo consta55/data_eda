@@ -100,10 +100,7 @@ from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 
 
-class GCPRetriever(BaseRetriever):
-    #def __init__(self,_get_relevant_documents):
-     #   self._get_relevant_documents = _get_relevant_documents()
-                
+class GCPRetriever(BaseRetriever):          
     
     """Asynchronously get documents relevant to a query.
 
@@ -114,9 +111,6 @@ class GCPRetriever(BaseRetriever):
     #     Returns:
     #         List of relevant documents
     """
-   
-
-    
 
     async def get_docs(user_query:str):
             qe = ollama.embeddings(model="mxbai-embed-large", prompt=user_query)
@@ -126,7 +120,6 @@ class GCPRetriever(BaseRetriever):
             print(docs)
             return docs
    
-    
         
     #docs = await get_docs(user_query)
     async def _get_relevant_documents(
@@ -137,14 +130,10 @@ class GCPRetriever(BaseRetriever):
             #raise Exception("Sorry, no numbers below zero")
             matches = await main(user_query)
             docs = [Document(page_content=t) for t in matches]
+            ans = "\n".join(doc.page_content for doc in docs)
+            ans = ans.replace("\n",' ')
             
-            return docs
+            return ans
 
     
 
-if __name__ == "__main__":
-   
-    user_query = "what does cholesterol do ?"
-    asyncio.run(GCPRetriever())
-    asyncio.run(_get_relevant_documents())
-    
