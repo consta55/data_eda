@@ -35,53 +35,16 @@ from langchain_core.prompts import PromptTemplate
 from IPython.display import display, Markdown
 from pydantic import BaseModel
 from langchain_community.chat_models import ChatOllama
+from app.member_data_pull import get_ai_summary
+
+import json
+
 
 
 app = FastAPI()
 user_query = "how can I lower my ldl cholesterol?"
-member_persona =[{
-        "patient_id":"001db85bd9a25730eacf1297e639ac56329f1b20d669101d7400c7f8372409f1",
-        "requisition_id":"2975090ecdc502c8ec1bc740969be9d780fe5cf56380a4167c121eb6ec2fd785",
-        "diet":[
-            "Omnivore"
-        ],
-        "physically_active":[
-            "false"
-        ],
-        "smoker":[
-            "false"
-        ],
-        "sex":[
-            "Female"
-        ],
-        "alcohol":[
-            "true"
-        ],
-        "alcohol_frequency":[
-            "Once a month"
-        ],
-        "OVER_Range":[
-            "ldl particle number",
-            "ldl medium",
-            "ldl peak size",
-            "ldl small",
-            "ldl cholesterol",
-            "total cholesterol",
-            "apolipoprotein b (apob)"
-        ],
-        "BELOW_Range":[
-
-        ],
-        "Outof_Range":[
-
-        ],
-        "identified_medications":"vitamin d, vitamin a, zinc",
-        "conditions":[
-            "asthma"
-        ],
-        "content":"Apolipoprotein B (Apo B) was high. Elevated levels of Apo B increase your cardiovascular risk. Apo B attaches to negative types of cholesterol that cause plaque buildup in your blood vessels, which can lead to damage and heart disease.\nThere are signs of a cholesterol problem (high total cholesterol, high LDL \u201cbad\u201d cholesterol, high LDL small cholesterol, high LDL medium cholesterol, high LDL particle number, high non-HDL cholesterol). This can be due to several causes including diet, genetics, and\/or toxin exposure. However, your HDL \"good\" cholesterol was high, which actually decreases cardiovascular risk. Please talk with your local doctor to develop a treatment plan.\nYour omega 3 profile correlates with moderate risk for heart disease. You have a mix of both negative and protective factors. Overall, the levels aren\u2019t concerning but this is something to keep an eye on.\n"
-    }]
-llm = ChatOllama(model="llama3.1")
+#llm = ChatOllama(model="llama3.1")
+llm = ChatVertexAI(model_name="gemini-pro")
 prompt = PromptTemplate(
     template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|> You are a medical professional.
     Use the following pieces of retrieved context to answer the question. 
@@ -95,6 +58,7 @@ prompt = PromptTemplate(
     input_variables=["user_query", "text", "member_persona"],
 )
 class User_query(BaseModel):
+  member_id: str  
   user_query: str
 
 data = []
@@ -102,11 +66,13 @@ data = []
 async def create_item(user_query: User_query):
     user_query_dict = user_query.model_dump()
     user_query = user_query_dict["user_query"]
+    member_id = user_query_dict["member_id"]
+    member_persona = get_ai_summary(member_id)
     llm_agent = prompt | llm 
     docs = await GCPRetriever().invoke(user_query)
     #docs = retriever.invoke(user_query)
     answer= llm_agent.invoke({"user_query" :user_query, "text": docs, "member_persona": member_persona})
-    return (answer)
+    return (answer.content)
 
 
 
